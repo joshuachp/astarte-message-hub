@@ -19,8 +19,8 @@
  */
 //! Contains the implementation for the Astarte message hub.
 
-use std::collections::HashMap;
 use std::sync::Arc;
+use std::{collections::HashMap, path::PathBuf};
 
 use astarte_message_hub_proto::types::InterfaceJson;
 use astarte_message_hub_proto::AstarteMessage;
@@ -38,6 +38,8 @@ pub struct AstarteMessageHub<T: Clone + AstartePublisher + AstarteSubscriber> {
     nodes: Arc<RwLock<HashMap<Uuid, AstarteNode>>>,
     /// The Astarte handler used to communicate with Astarte.
     astarte_handler: T,
+    /// Interface directory
+    _interfaces_dir: PathBuf,
 }
 
 /// A single node that can be connected to the Astarte message hub.
@@ -65,10 +67,14 @@ where
     /// Instantiate a new Astarte message hub.
     ///
     /// The `astarte_handler` should satisfy the required traits for an Astarte handler.
-    pub fn new(astarte_handler: T) -> Self {
+    pub fn new<P>(astarte_handler: T, interfaces_dir: P) -> Self
+    where
+        P: Into<PathBuf>,
+    {
         AstarteMessageHub {
             nodes: Arc::new(RwLock::new(HashMap::new())),
             astarte_handler,
+            _interfaces_dir: interfaces_dir.into(),
         }
     }
 }
@@ -329,7 +335,7 @@ mod test {
             .returning(MockAstarteHandler::new);
 
         let astarte_message: AstarteMessageHub<MockAstarteHandler> =
-            AstarteMessageHub::new(mock_astarte);
+            AstarteMessageHub::new(mock_astarte, "");
 
         let interfaces = vec![
             SERV_PROPS_IFACE.to_string().into_bytes(),
@@ -355,7 +361,7 @@ mod test {
             .returning(MockAstarteHandler::new);
 
         let astarte_message: AstarteMessageHub<MockAstarteHandler> =
-            AstarteMessageHub::new(mock_astarte);
+            AstarteMessageHub::new(mock_astarte, "");
 
         let node_introspection = Node {
             uuid: "a1".to_owned(),
@@ -383,7 +389,7 @@ mod test {
             .returning(MockAstarteHandler::new);
 
         let astarte_message: AstarteMessageHub<MockAstarteHandler> =
-            AstarteMessageHub::new(mock_astarte);
+            AstarteMessageHub::new(mock_astarte, "");
 
         let interfaces = vec![SERV_PROPS_IFACE.to_string().into_bytes()];
 
@@ -412,7 +418,7 @@ mod test {
             .returning(MockAstarteHandler::new);
 
         let astarte_message_hub: AstarteMessageHub<MockAstarteHandler> =
-            AstarteMessageHub::new(mock_astarte);
+            AstarteMessageHub::new(mock_astarte, "");
 
         let interface_name = "io.demo.Values".to_owned();
 
@@ -443,7 +449,7 @@ mod test {
             .returning(MockAstarteHandler::new);
 
         let astarte_message_hub: AstarteMessageHub<MockAstarteHandler> =
-            AstarteMessageHub::new(mock_astarte);
+            AstarteMessageHub::new(mock_astarte, "");
 
         let interface_name = "io.demo.Values".to_owned();
 
@@ -477,7 +483,7 @@ mod test {
         });
         mock_astarte.expect_unsubscribe().returning(|_| Ok(()));
         let astarte_message: AstarteMessageHub<MockAstarteHandler> =
-            AstarteMessageHub::new(mock_astarte);
+            AstarteMessageHub::new(mock_astarte, "");
 
         let interfaces = vec![SERV_PROPS_IFACE.to_string().into_bytes()];
 
@@ -502,7 +508,7 @@ mod test {
             .returning(MockAstarteHandler::new);
 
         let astarte_message: AstarteMessageHub<MockAstarteHandler> =
-            AstarteMessageHub::new(mock_astarte);
+            AstarteMessageHub::new(mock_astarte, "");
 
         let node_introspection = Node {
             uuid: "a1".to_owned(),
@@ -533,7 +539,7 @@ mod test {
             .returning(MockAstarteHandler::new);
 
         let astarte_message: AstarteMessageHub<MockAstarteHandler> =
-            AstarteMessageHub::new(mock_astarte);
+            AstarteMessageHub::new(mock_astarte, "");
 
         let interfaces = vec![SERV_PROPS_IFACE.to_string().into_bytes()];
 
@@ -568,7 +574,7 @@ mod test {
             ))
         });
 
-        let astarte_message = AstarteMessageHub::new(mock_astarte);
+        let astarte_message = AstarteMessageHub::new(mock_astarte, "");
 
         let interfaces = vec![SERV_PROPS_IFACE.to_string().into_bytes()];
 
