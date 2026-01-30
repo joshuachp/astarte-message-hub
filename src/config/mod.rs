@@ -26,9 +26,12 @@ use std::sync::Arc;
 
 use astarte_device_sdk::store::sqlite::Size;
 use astarte_device_sdk::transport::mqtt::Credential;
+use eyre::Context;
+use futures::{StreamExt, TryFutureExt, TryStreamExt};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use tokio::{fs, sync::Notify};
+use tokio_stream::wrappers::ReadDirStream;
 
 use crate::config::http::HttpConfigProvider;
 use crate::config::protobuf::ProtobufConfigProvider;
@@ -54,7 +57,7 @@ pub const CONFIG_FILES: [&str; 2] = [CONFIG_FILE_NAME, "/etc/message-hub/config.
 
 /// Struct to deserialize the configuration options for the Astarte message hub.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-pub struct Config {
+pub struct MsgHubConfig {
     /// The Astarte realm the device belongs to.
     pub realm: Option<String>,
     /// A unique ID for the device.
@@ -85,7 +88,38 @@ pub struct Config {
     pub astarte: DeviceSdkOptions,
 }
 
-impl Config {
+impl MsgHubConfig {
+    /// Reads the configurations files.
+    ///
+    /// The order of the configurations files is as follows:
+    ///
+    /// 1. /etc/message-hub/config.toml
+    /// 2. /etc/message-hub/config.d/*.toml and /var/lib/message-hub/config/*.toml all sorted in alphabetical order.
+    /// 3. Environment variables and command line arguments
+    pub async fn read(config_dir: &Path, store_dir: Option<&Path>) -> eyre::Result<Option<Self>> {
+        let settings = config::Config::builder()
+            .add_source(config::File::from(config_dir.join("config.toml")).required(false));
+
+        let files = Vec::new();
+
+        match tokio::fs::read_dir(config_dir.join("config.d")).await {
+            Ok(dir) => {
+                ReadDirStream::new(dir).try_filter_map(|entry| async {
+                    entry
+                        .file_type()
+                        .await
+                        .and_then(|f_type| f_type.is_file().then_some(entry))
+                });
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(eyre::Report::new(err).wrap_err("couldn't read config.d directory"));
+            }
+        }
+
+        todo!()
+    }
+
     /// Searches for the configuration file in the store directory or [default locations](CONFIG_FILES).
     pub async fn find_config(
         custom_config: Option<&Path>,
@@ -270,7 +304,7 @@ impl Config {
         store_directory: &Path,
         http: SocketAddr,
         grpc: SocketAddr,
-    ) -> Result<Config, AstarteMessageHubError> {
+    ) -> Result<MsgHubConfig, AstarteMessageHubError> {
         let notify_config = Arc::new(Notify::new());
 
         let config_file = store_directory.join(CONFIG_FILE_NAME);
@@ -301,10 +335,10 @@ impl Config {
     }
 }
 
-impl TryFrom<Config> for MessageHubOptions {
+impl TryFrom<MsgHubConfig> for MessageHubOptions {
     type Error = ConfigError;
 
-    fn try_from(value: Config) -> Result<Self, Self::Error> {
+    fn try_from(value: MsgHubConfig) -> Result<Self, Self::Error> {
         let device_id = value
             .device_id
             .filter(|realm| !realm.is_empty())
@@ -475,7 +509,7 @@ mod test {
     #[test]
     fn test_is_valid_cred_sec_ok() {
         #[allow(deprecated)]
-        let expected_msg_hub_opts = Config {
+        let expected_msg_hub_opts = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("3".to_string()),
@@ -498,7 +532,7 @@ mod test {
     #[test]
     fn test_is_valid_pairing_token_ok() {
         #[allow(deprecated)]
-        let expected_msg_hub_opts = Config {
+        let expected_msg_hub_opts = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("3".to_string()),
@@ -520,7 +554,7 @@ mod test {
     #[test]
     fn test_is_valid_empty_realm_err() {
         #[allow(deprecated)]
-        let expected_msg_hub_opts = Config {
+        let expected_msg_hub_opts = MsgHubConfig {
             realm: Some("".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("3".to_string()),
@@ -540,7 +574,7 @@ mod test {
     #[test]
     fn test_is_valid_empty_device_id() {
         #[allow(deprecated)]
-        let expected_msg_hub_opts = Config {
+        let expected_msg_hub_opts = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("".to_string()),
             pairing_url: Some("3".to_string()),
@@ -561,7 +595,7 @@ mod test {
     #[test]
     fn test_is_valid_empty_pairing_url_err() {
         #[allow(deprecated)]
-        let expected_msg_hub_opts = Config {
+        let expected_msg_hub_opts = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("".to_string()),
@@ -581,7 +615,7 @@ mod test {
     #[test]
     fn test_is_valid_empty_credentials_secred_err() {
         #[allow(deprecated)]
-        let expected_msg_hub_opts = Config {
+        let expected_msg_hub_opts = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("3".to_string()),
@@ -601,7 +635,7 @@ mod test {
     #[test]
     fn test_is_valid_empty_pairing_token_err() {
         #[allow(deprecated)]
-        let expected_msg_hub_opts = Config {
+        let expected_msg_hub_opts = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("3".to_string()),
@@ -621,7 +655,7 @@ mod test {
     #[test]
     fn test_is_valid_invalid_interf_dir_err() {
         #[allow(deprecated)]
-        let expected_msg_hub_opts = Config {
+        let expected_msg_hub_opts = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("3".to_string()),
@@ -641,7 +675,7 @@ mod test {
     #[test]
     fn test_is_valid_missing_credentials_secret_and_pairing_token_err() {
         #[allow(deprecated)]
-        let expected_msg_hub_opts = Config {
+        let expected_msg_hub_opts = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("3".to_string()),
@@ -668,7 +702,7 @@ mod test {
             .unwrap();
 
         #[allow(deprecated)]
-        let mut opt = Config {
+        let mut opt = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("3".to_string()),
@@ -692,7 +726,7 @@ mod test {
         let dir = tempfile::TempDir::new().unwrap();
 
         #[allow(deprecated)]
-        let mut opt = Config {
+        let mut opt = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("3".to_string()),
@@ -720,7 +754,7 @@ mod test {
     #[tokio::test]
     async fn load_toml_config() {
         #[allow(deprecated)]
-        let expected = Config {
+        let expected = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("3".to_string()),
@@ -744,7 +778,7 @@ mod test {
 
         let path = Some(path);
 
-        let options = Config::find_config(path.as_deref(), None)
+        let options = MsgHubConfig::find_config(path.as_deref(), None)
             .await
             .unwrap()
             .unwrap();
@@ -757,7 +791,7 @@ mod test {
         let dir = tempfile::TempDir::new().unwrap();
 
         #[allow(deprecated)]
-        let expected = Config {
+        let expected = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("2".to_string()),
             pairing_url: Some("3".to_string()),
@@ -777,7 +811,7 @@ mod test {
             .await
             .unwrap();
 
-        let opt = Config::find_config(None, Some(dir.path()))
+        let opt = MsgHubConfig::find_config(None, Some(dir.path()))
             .await
             .unwrap()
             .unwrap();
@@ -790,13 +824,13 @@ mod test {
     fn deserialize_example_config() {
         let config = include_str!("../../examples/message-hub-config.toml");
 
-        let opts = toml::from_str::<Config>(config);
+        let opts = toml::from_str::<MsgHubConfig>(config);
 
         assert!(opts.is_ok(), "error deserializing config: {opts:?}");
         let opts = opts.unwrap();
 
         #[allow(deprecated)]
-        let expected = Config {
+        let expected = MsgHubConfig {
             realm: Some("example_realm".to_string()),
             device_id: Some("YOUR_UNIQUE_DEVICE_ID".to_string()),
             credentials_secret: None,
@@ -823,7 +857,7 @@ mod test {
             .unwrap();
 
         #[allow(deprecated)]
-        let mut opt = Config {
+        let mut opt = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: None,
             pairing_url: Some("3".to_string()),
@@ -852,7 +886,7 @@ mod test {
             .unwrap();
 
         #[allow(deprecated)]
-        let mut opt = Config {
+        let mut opt = MsgHubConfig {
             realm: Some("1".to_string()),
             device_id: Some("".to_string()),
             pairing_url: Some("3".to_string()),
@@ -889,7 +923,7 @@ mod test {
             ignore_ssl = false
         "#;
 
-        let res = toml::from_str::<Config>(TOML_FILE);
+        let res = toml::from_str::<MsgHubConfig>(TOML_FILE);
         let options = res.expect("Parsing of TOML file failed");
         assert_eq!(options.realm.unwrap(), "1");
         assert_eq!(options.device_id, Some("2".to_string()));
@@ -920,7 +954,7 @@ mod test {
             ignore_ssl = true
         "#;
 
-        let res = toml::from_str::<Config>(TOML_FILE);
+        let res = toml::from_str::<MsgHubConfig>(TOML_FILE);
         let options = res.expect("Parsing of TOML file failed");
         assert_eq!(options.realm.unwrap(), "1");
         assert_eq!(options.device_id, Some("2".to_string()));
@@ -951,7 +985,7 @@ mod test {
             ignore_ssl = true
         "#;
 
-        let res = toml::from_str::<Config>(TOML_FILE);
+        let res = toml::from_str::<MsgHubConfig>(TOML_FILE);
         let options = res.expect("Parsing of TOML file failed");
         assert_eq!(options.realm.unwrap(), "1");
         assert_eq!(options.device_id.unwrap(), "2");
@@ -981,7 +1015,7 @@ mod test {
             ignore_ssl = true
         "#;
 
-        let config = toml::from_str::<Config>(TOML_FILE).unwrap();
+        let config = toml::from_str::<MsgHubConfig>(TOML_FILE).unwrap();
         assert!(config.validate().is_err());
         MessageHubOptions::try_from(config).unwrap_err();
     }
@@ -999,7 +1033,7 @@ mod test {
             ignore_ssl = true
         "#;
 
-        let config = toml::from_str::<Config>(TOML_FILE).unwrap();
+        let config = toml::from_str::<MsgHubConfig>(TOML_FILE).unwrap();
         assert!(config.validate().is_err());
         MessageHubOptions::try_from(config).unwrap_err();
     }
@@ -1023,7 +1057,7 @@ mod test {
             max_retention_items = 10
         "#;
 
-        let res = toml::from_str::<Config>(TOML_FILE);
+        let res = toml::from_str::<MsgHubConfig>(TOML_FILE);
         let options = res.expect("Parsing of TOML file failed");
         assert_eq!(options.realm.unwrap(), "1");
         assert_eq!(options.device_id.unwrap(), "2");
@@ -1062,7 +1096,7 @@ mod test {
             max_retention_items = 10
         "#;
 
-        let res = toml::from_str::<Config>(TOML_FILE);
+        let res = toml::from_str::<MsgHubConfig>(TOML_FILE);
         let options = res.expect("Parsing of TOML file failed");
         assert!(options.astarte.ignore_ssl);
         assert_eq!(
@@ -1086,7 +1120,7 @@ mod test {
             max_db_size = { value = 10, unit = "MiB" }
         "#;
 
-        let res = toml::from_str::<Config>(TOML_FILE);
+        let res = toml::from_str::<MsgHubConfig>(TOML_FILE);
         assert!(res.is_err());
     }
 
@@ -1100,7 +1134,7 @@ mod test {
             max_db_journal_size = { value = 5, unit = "tb" }
         "#;
 
-        let res = toml::from_str::<Config>(TOML_FILE);
+        let res = toml::from_str::<MsgHubConfig>(TOML_FILE);
         assert!(res.is_err());
     }
 
@@ -1111,7 +1145,7 @@ mod test {
             max_retention_items = 0
         "#;
 
-        let res = toml::from_str::<Config>(TOML_FILE);
+        let res = toml::from_str::<MsgHubConfig>(TOML_FILE);
         assert!(res.is_err());
     }
 
@@ -1122,7 +1156,7 @@ mod test {
             max_retention_items = 0
         "#;
 
-        let res = toml::from_str::<Config>(TOML_FILE);
+        let res = toml::from_str::<MsgHubConfig>(TOML_FILE);
         assert!(res.is_err());
     }
 }

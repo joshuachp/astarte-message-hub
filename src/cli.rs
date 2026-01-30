@@ -18,7 +18,7 @@
 
 use std::{net::IpAddr, path::PathBuf};
 
-use astarte_message_hub::config::{Config, DeviceSdkOptions};
+use astarte_message_hub::config::{MsgHubConfig, DeviceSdkOptions};
 use clap::{Args, Parser};
 
 /// A central service that runs on (Linux) devices for collecting and delivering messages from N
@@ -52,7 +52,7 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn merge(self, config: &mut Config) {
+    pub fn merge(self, config: &mut MsgHubConfig) {
         self.grpc.merge(config);
         self.device.merge(config);
         self.astarte.merge(&mut config.astarte);
@@ -86,7 +86,7 @@ pub struct GrpcOptions {
 }
 
 impl GrpcOptions {
-    fn merge(self, config: &mut Config) {
+    fn merge(self, config: &mut MsgHubConfig) {
         config.grpc_socket_host.merge(self.host);
         config.grpc_socket_port.merge(self.port);
     }
@@ -128,7 +128,7 @@ pub struct DeviceOptions {
 }
 
 impl DeviceOptions {
-    pub fn merge(self, config: &mut Config) {
+    pub fn merge(self, config: &mut MsgHubConfig) {
         config.realm.merge(self.realm);
         config.device_id.merge(self.device_id);
         config.pairing_url.merge(self.pairing_url);

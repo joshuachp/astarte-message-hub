@@ -36,7 +36,7 @@ use tokio::task::{JoinError, JoinHandle};
 use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
 
-use super::{Config, DeviceSdkOptions};
+use super::{MsgHubConfig, DeviceSdkOptions};
 
 /// Protobuf server error
 #[derive(thiserror::Error, Debug, displaydoc::Display)]
@@ -89,7 +89,7 @@ impl MessageHubConfig for AstarteMessageHubConfig {
             })?;
 
         #[allow(deprecated)]
-        let message_hub_options = Config {
+        let message_hub_options = MsgHubConfig {
             realm: Some(req.realm),
             device_id: req.device_id,
             credentials_secret: req.credentials_secret,

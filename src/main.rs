@@ -21,7 +21,7 @@
 
 #![warn(missing_docs)]
 
-use astarte_message_hub::config::{Config, DEFAULT_HOST, DEFAULT_HTTP_PORT};
+use astarte_message_hub::config::{MsgHubConfig, DEFAULT_HOST, DEFAULT_HTTP_PORT};
 use eyre::{Context, OptionExt};
 use std::io::{IsTerminal, stdout};
 use tracing_subscriber::layer::SubscriberExt;
@@ -81,7 +81,7 @@ async fn get_config_options(args: Cli) -> eyre::Result<MessageHubOptions> {
     let store_directory = args.device.store_dir.as_deref();
     let custom_config = args.config.as_deref().or(args.toml.as_deref());
 
-    let mut config = match Config::find_config(custom_config, store_directory).await? {
+    let mut config = match MsgHubConfig::find_config(custom_config, store_directory).await? {
         Some(config) => config,
         None => {
             let store_directory = args.device.store_dir.as_deref().ok_or_eyre(
@@ -100,7 +100,7 @@ async fn get_config_options(args: Cli) -> eyre::Result<MessageHubOptions> {
             )
                 .into();
 
-            Config::listen_dynamic_config(store_directory, http, grpc).await?
+            MsgHubConfig::listen_dynamic_config(store_directory, http, grpc).await?
         }
     };
 

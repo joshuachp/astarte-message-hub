@@ -39,7 +39,7 @@ use tokio_util::sync::CancellationToken;
 use crate::config::MessageHubOptions;
 use crate::error::ConfigError;
 
-use super::{Config, DeviceSdkOptions};
+use super::{MsgHubConfig, DeviceSdkOptions};
 
 /// HTTP server error
 #[derive(thiserror::Error, Debug)]
@@ -212,7 +212,7 @@ async fn set_config(
     Json(payload): Json<ConfigPayload>,
 ) -> Result<(StatusCode, Json<ConfigResponse>), ErrorResponse> {
     #[allow(deprecated)]
-    let message_hub_options = Config {
+    let message_hub_options = MsgHubConfig {
         realm: Some(payload.realm),
         device_id: payload.device_id,
         credentials_secret: payload.credentials_secret,
