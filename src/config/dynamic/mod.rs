@@ -18,6 +18,9 @@
 
 //! Dynamic configuration for the Message Hub
 
+use std::net::IpAddr;
+
+use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -30,6 +33,22 @@ use super::loader::ConfigEntry;
 
 pub mod grpc;
 pub mod http;
+
+struct Validate {
+    current: Option<ConfigPayload>,
+    paired: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ConfigPayload {
+    realm: Option<String>,
+    device_id: Option<String>,
+    credentials_secret: Option<String>,
+    pairing_url: String,
+    pairing_token: Option<String>,
+    grpc_socket_host: Option<IpAddr>,
+    grpc_socket_port: Option<u16>,
+}
 
 /// Function that get the configurations needed by the Message Hub.
 /// The configuration file is first retrieved from one of two default base locations.
