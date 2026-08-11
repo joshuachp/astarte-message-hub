@@ -27,8 +27,9 @@ use std::task::{Context, Poll};
 use astarte_interfaces::Interface;
 use astarte_message_hub_proto::message_hub_server::MessageHub;
 use astarte_message_hub_proto::{
-    AstarteMessage, AstartePropertyIndividual, InterfaceName, InterfacesJson, InterfacesName,
-    MessageHubEvent, Node, PropertyFilter, PropertyIdentifier, StoredProperties,
+    AstarteMessage, AstartePropertyIndividual, GetConnectionStateResponse, InterfaceName,
+    InterfacesJson, InterfacesName, IsConnectedResponse, IsRegisteredResponse, MessageHubEvent,
+    Node, PropertyFilter, PropertyIdentifier, StoredProperties,
 };
 use axum::http::{self, Uri};
 use itertools::Itertools;
@@ -660,6 +661,27 @@ where
             .await
             .map_err(Status::from)
     }
+
+    async fn is_connected(
+        &self,
+        _request: Request<()>,
+    ) -> Result<Response<IsConnectedResponse>, Status> {
+        todo!()
+    }
+
+    async fn is_registered(
+        &self,
+        _request: Request<()>,
+    ) -> Result<Response<IsRegisteredResponse>, Status> {
+        todo!()
+    }
+
+    async fn get_connection_state(
+        &self,
+        _request: Request<()>,
+    ) -> Result<Response<GetConnectionStateResponse>, Status> {
+        todo!()
+    }
 }
 
 /// A single node that can be connected to the Astarte message hub.
@@ -863,6 +885,7 @@ mod test {
         let interfaces = vec![SERV_PROPS_IFACE.to_string(), SERV_OBJ_IFACE.to_string()];
         let node = Node {
             interfaces_json: interfaces,
+            connection_events: false,
         };
 
         let mut req_node = Request::new(node);
@@ -943,6 +966,7 @@ mod test {
 
         let node = Node {
             interfaces_json: vec![],
+            connection_events: false,
         };
 
         // avoid inserting the node id
@@ -970,7 +994,10 @@ mod test {
 
         let interfaces_json = vec![SERV_PROPS_IFACE.to_string()];
 
-        let node = Node { interfaces_json };
+        let node = Node {
+            interfaces_json,
+            connection_events: false,
+        };
 
         let req_node = Request::new(node);
         let attach_result = msg_hub.attach(req_node).await;
@@ -1137,7 +1164,10 @@ mod test {
         let (msg_hub, _dir) = mock_msg_hub(mock_astarte).await;
 
         let interfaces_json = vec![SERV_PROPS_IFACE.to_string()];
-        let node = Node { interfaces_json };
+        let node = Node {
+            interfaces_json,
+            connection_events: false,
+        };
 
         let mut req_node_attach = Request::new(node);
         req_node_attach.extensions_mut().insert(NodeId(TEST_UUID));

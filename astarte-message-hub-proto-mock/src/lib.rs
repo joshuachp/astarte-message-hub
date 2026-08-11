@@ -103,6 +103,36 @@ mock! {
         ) -> std::result::Result<tonic::Response<astarte_message_hub_proto::AstartePropertyIndividual>, tonic::Status>
         where
             R: tonic::IntoRequest<astarte_message_hub_proto::PropertyIdentifier> + 'static;
+
+        pub async fn is_registered<R>(
+            &mut self,
+            request: R,
+        ) -> std::result::Result<
+            tonic::Response<astarte_message_hub_proto::IsRegisteredResponse>,
+            tonic::Status,
+        >
+        where
+            R:  tonic::IntoRequest<()> + 'static;
+
+        pub async fn is_connected<R>(
+            &mut self,
+            request: R,
+        ) -> std::result::Result<
+            tonic::Response<astarte_message_hub_proto::IsConnectedResponse>,
+            tonic::Status,
+        >
+        where
+            R:  tonic::IntoRequest<()> + 'static;
+
+        pub async fn get_connection_state<R>(
+            &mut self,
+            request: R,
+        ) -> std::result::Result<
+            tonic::Response<astarte_message_hub_proto::GetConnectionStateResponse>,
+            tonic::Status,
+        >
+        where
+            R:  tonic::IntoRequest<()> + 'static;
     }
 
     impl<T> std::clone::Clone for MessageHubClient<T> {
