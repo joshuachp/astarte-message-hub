@@ -130,12 +130,13 @@ pub struct MessageHubError {
     pub source: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// MessageHubEvent is a type of message for returning and propagating errors.
+///
 /// It is an enum with the variants, AstarteMessage(message), representing success and
 /// containing an astarte message value, and MessageHubError(E) representing error and
 /// containing an error value.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MessageHubEvent {
-    #[prost(oneof = "message_hub_event::Event", tags = "1, 2")]
+    #[prost(oneof = "message_hub_event::Event", tags = "1, 2, 3")]
     pub event: ::core::option::Option<message_hub_event::Event>,
 }
 /// Nested message and enum types in `MessageHubEvent`.
@@ -148,6 +149,9 @@ pub mod message_hub_event {
         /// A message that contains a specific Astarte Message Hub error.
         #[prost(message, tag = "2")]
         Error(super::MessageHubError),
+        /// Change in the connection status.
+        #[prost(message, tag = "3")]
+        Connection(super::ConnectionEvent),
     }
 }
 /// Astarte message to be used when sending data to Astarte.
@@ -177,6 +181,72 @@ pub mod astarte_message {
         /// A property data type.
         #[prost(message, tag = "5")]
         PropertyIndividual(super::AstartePropertyIndividual),
+    }
+}
+/// Event for when the connection state changes.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ConnectionEvent {
+    /// New state of the connection.
+    #[prost(enumeration = "ConnectionState", tag = "1")]
+    pub state: i32,
+}
+/// State of the connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ConnectionState {
+    /// Empty enum value, used only for ProtoBuf purposes.
+    ///
+    /// Is not an actual connection state.
+    Unspecified = 0,
+    /// Initial connection state.
+    Idle = 1,
+    /// The Device is not yet registered with Astarte.
+    Unregistered = 2,
+    /// Registered device, not yet connected.
+    Registered = 3,
+    /// Connection with Astarte started.
+    Connecting = 4,
+    /// Device connected with Astarte.
+    Connected = 5,
+    /// Device disconnected from Astarte.
+    ///
+    /// This can be caused by a Network or Application error.
+    Disconnected = 6,
+    /// The device is in an unknown connection state.
+    ///
+    /// This will be used for forward compatibility and possible state errors.
+    Unknown = 7,
+}
+impl ConnectionState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CONNECTION_STATE_UNSPECIFIED",
+            Self::Idle => "CONNECTION_STATE_IDLE",
+            Self::Unregistered => "CONNECTION_STATE_UNREGISTERED",
+            Self::Registered => "CONNECTION_STATE_REGISTERED",
+            Self::Connecting => "CONNECTION_STATE_CONNECTING",
+            Self::Connected => "CONNECTION_STATE_CONNECTED",
+            Self::Disconnected => "CONNECTION_STATE_DISCONNECTED",
+            Self::Unknown => "CONNECTION_STATE_UNKNOWN",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CONNECTION_STATE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CONNECTION_STATE_IDLE" => Some(Self::Idle),
+            "CONNECTION_STATE_UNREGISTERED" => Some(Self::Unregistered),
+            "CONNECTION_STATE_REGISTERED" => Some(Self::Registered),
+            "CONNECTION_STATE_CONNECTING" => Some(Self::Connecting),
+            "CONNECTION_STATE_CONNECTED" => Some(Self::Connected),
+            "CONNECTION_STATE_DISCONNECTED" => Some(Self::Disconnected),
+            "CONNECTION_STATE_UNKNOWN" => Some(Self::Unknown),
+            _ => None,
+        }
     }
 }
 /// Configuration message to be used to send configuration to the Astarte message hub.
@@ -552,6 +622,11 @@ pub struct Node {
     /// Array of string representing all .json interface files of the node.
     #[prost(string, repeated, tag = "2")]
     pub interfaces_json: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// Flag to subscribe to connection events.
+    ///
+    /// Defaults to false.
+    #[prost(bool, tag = "3")]
+    pub connection_events: bool,
 }
 /// A message containing all the properties values and information associated to a given astarte interface.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -597,6 +672,24 @@ pub struct PropertyIdentifier {
     /// Property path.
     #[prost(string, tag = "2")]
     pub path: ::prost::alloc::string::String,
+}
+/// Response for IsRegistered rpc.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct IsRegisteredResponse {
+    #[prost(bool, tag = "1")]
+    pub registered: bool,
+}
+/// Response for IsConnected rpc.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct IsConnectedResponse {
+    #[prost(bool, tag = "1")]
+    pub connected: bool,
+}
+/// Response for GetConnectionState rpc.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetConnectionStateResponse {
+    #[prost(enumeration = "ConnectionState", tag = "1")]
+    pub state: i32,
 }
 /// Generated client implementations.
 pub mod message_hub_client {
@@ -690,6 +783,7 @@ pub mod message_hub_client {
             self
         }
         /// This function should be used to attach a node to an instance of the Astarte message hub.
+        ///
         /// Returns a data stream from the Astarte message hub.
         pub async fn attach(
             &mut self,
@@ -894,6 +988,90 @@ pub mod message_hub_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        /// Check whether the device is registered with Astarte
+        pub async fn is_registered(
+            &mut self,
+            request: impl tonic::IntoRequest<()>,
+        ) -> std::result::Result<
+            tonic::Response<super::IsRegisteredResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/astarteplatform.msghub.MessageHub/IsRegistered",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("astarteplatform.msghub.MessageHub", "IsRegistered"),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        /// Check whether the device is connected with Astarte
+        pub async fn is_connected(
+            &mut self,
+            request: impl tonic::IntoRequest<()>,
+        ) -> std::result::Result<
+            tonic::Response<super::IsConnectedResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/astarteplatform.msghub.MessageHub/IsConnected",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("astarteplatform.msghub.MessageHub", "IsConnected"),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        /// Get the current device connection status.
+        pub async fn get_connection_state(
+            &mut self,
+            request: impl tonic::IntoRequest<()>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetConnectionStateResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/astarteplatform.msghub.MessageHub/GetConnectionState",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "astarteplatform.msghub.MessageHub",
+                        "GetConnectionState",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -916,6 +1094,7 @@ pub mod message_hub_server {
             + std::marker::Send
             + 'static;
         /// This function should be used to attach a node to an instance of the Astarte message hub.
+        ///
         /// Returns a data stream from the Astarte message hub.
         async fn attach(
             &self,
@@ -963,6 +1142,30 @@ pub mod message_hub_server {
             request: tonic::Request<super::PropertyIdentifier>,
         ) -> std::result::Result<
             tonic::Response<super::AstartePropertyIndividual>,
+            tonic::Status,
+        >;
+        /// Check whether the device is registered with Astarte
+        async fn is_registered(
+            &self,
+            request: tonic::Request<()>,
+        ) -> std::result::Result<
+            tonic::Response<super::IsRegisteredResponse>,
+            tonic::Status,
+        >;
+        /// Check whether the device is connected with Astarte
+        async fn is_connected(
+            &self,
+            request: tonic::Request<()>,
+        ) -> std::result::Result<
+            tonic::Response<super::IsConnectedResponse>,
+            tonic::Status,
+        >;
+        /// Get the current device connection status.
+        async fn get_connection_state(
+            &self,
+            request: tonic::Request<()>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetConnectionStateResponse>,
             tonic::Status,
         >;
     }
@@ -1380,6 +1583,127 @@ pub mod message_hub_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = GetPropertySvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/astarteplatform.msghub.MessageHub/IsRegistered" => {
+                    #[allow(non_camel_case_types)]
+                    struct IsRegisteredSvc<T: MessageHub>(pub Arc<T>);
+                    impl<T: MessageHub> tonic::server::UnaryService<()>
+                    for IsRegisteredSvc<T> {
+                        type Response = super::IsRegisteredResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as MessageHub>::is_registered(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = IsRegisteredSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/astarteplatform.msghub.MessageHub/IsConnected" => {
+                    #[allow(non_camel_case_types)]
+                    struct IsConnectedSvc<T: MessageHub>(pub Arc<T>);
+                    impl<T: MessageHub> tonic::server::UnaryService<()>
+                    for IsConnectedSvc<T> {
+                        type Response = super::IsConnectedResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as MessageHub>::is_connected(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = IsConnectedSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/astarteplatform.msghub.MessageHub/GetConnectionState" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetConnectionStateSvc<T: MessageHub>(pub Arc<T>);
+                    impl<T: MessageHub> tonic::server::UnaryService<()>
+                    for GetConnectionStateSvc<T> {
+                        type Response = super::GetConnectionStateResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as MessageHub>::get_connection_state(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetConnectionStateSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
